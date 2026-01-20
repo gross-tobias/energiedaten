@@ -1,12 +1,12 @@
-### Energiedaten von Website abgreifen (FIDP)
+### Energiedaten von Website abgreifen
 
 _Fachinformatiker für Anwendungsentwicklung_
 
 **Projektteam:**
 
-- Tobias Groß
 - Julian Platz
 - Curtis Kristen
+- Tobias Groß
 
 <br>
 
@@ -23,6 +23,7 @@ _Fachinformatiker für Anwendungsentwicklung_
 <br>
 
 **Geplante Technologien und Werkzeuge**
+
 - Programmiersprache(n): **Python**
 - Frameworks / Bibliotheken:
   - **requests** - Abrufen von Daten über HTTP
@@ -31,4 +32,3 @@ _Fachinformatiker für Anwendungsentwicklung_
 - Datenbank: **MySQL**
 - Entwicklungsumgebung: **Visual Studio Code**
 - Versionsverwaltung: **GIT**
-
