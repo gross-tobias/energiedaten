@@ -80,4 +80,3 @@ class EnergyChartsClient:
         response.raise_for_status()
         return response.json()
     
-print(EnergyChartsClient().getWindOffshoreShareDailyAvg())
