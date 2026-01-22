@@ -48,25 +48,50 @@ class EnergyChartsDatabase:
 
     def saveDailyAverage(self, data, energy_source):
         if not data or "days" not in data:
-           return
+           print(f"DEBUG: Keine gültigen Daily Average Daten für {energy_source}")
+           return False
 
-        sql = "SELECT data_source_id FROM data_source WHERE name = 'Energy Charts'"
-        data_source_id = self._executeSelect(sql)[0][0]
+        try:
+            sql = "SELECT data_source_id FROM data_source WHERE name = 'Energy Charts'"
+            result = self._executeSelect(sql)
+            if not result:
+                print(f"DEBUG: Keine data_source gefunden")
+                return False
+            data_source_id = result[0][0]
 
-        sql = f"SELECT energy_source_id FROM energy_source WHERE name = '{energy_source}'"
-        energy_source_id = self._executeSelect(sql)[0][0]
+            sql = f"SELECT energy_source_id FROM energy_source WHERE name = '{energy_source}'"
+            result = self._executeSelect(sql)
+            if not result:
+                print(f"DEBUG: Keine energy_source '{energy_source}' gefunden")
+                return False
+            energy_source_id = result[0][0]
 
-        records = []
-        for day, val in zip(data["days"], data["data"]):
-            if val is not None:
-                records.append((
-                    datetime.strptime(day, "%d.%m.%Y"),
-                    val,
-                    energy_source_id,
-                    data_source_id))
+            records = []
+            for day, val in zip(data["days"], data["data"]):
+                if val is not None:
+                    try:
+                        records.append((
+                            datetime.strptime(day, "%d.%m.%Y"),
+                            float(val),
+                            energy_source_id,
+                            data_source_id))
+                    except Exception as e:
+                        print(f"DEBUG: Fehler beim Parsen von Tag {day}: {e}")
+                        continue
 
-        sql = "INSERT IGNORE INTO energy_data (timestamp, value, energy_source_id, data_source_id) VALUES (%s, %s, %s, %s)"
-        self._executeBatch(sql, records)
+            if records:
+                sql = "INSERT IGNORE INTO energy_data (timestamp, value, energy_source_id, data_source_id) VALUES (%s, %s, %s, %s)"
+                self._executeBatch(sql, records)
+                print(f"DEBUG: {len(records)} Datensätze für {energy_source} gespeichert (Daily Average)")
+                return True
+            else:
+                print(f"DEBUG: Keine Datensätze zum Speichern für {energy_source}")
+                return False
+        except Exception as e:
+            print(f"DEBUG: Fehler beim Speichern von Daily Average für {energy_source}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _executeSelect(self, sql):
         try:
@@ -102,3 +127,97 @@ class EnergyChartsDatabase:
             conn.close()
         except Error as e:
             print(f"Database setup error: {e}")
+
+    def getEnergyData(self, energy_source=None, start_date=None, end_date=None):
+        """Holt Energiedaten aus der Datenbank"""
+        sql = """
+            SELECT ed.timestamp, ed.value, es.name as energy_source_name
+            FROM energy_data ed
+            JOIN energy_source es ON ed.energy_source_id = es.energy_source_id
+            WHERE 1=1
+        """
+        params = []
+        
+        if energy_source:
+            sql += " AND es.name = %s"
+            params.append(energy_source)
+        
+        if start_date:
+            sql += " AND ed.timestamp >= %s"
+            params.append(start_date)
+        
+        if end_date:
+            sql += " AND ed.timestamp <= %s"
+            params.append(end_date)
+        
+        sql += " ORDER BY ed.timestamp ASC"
+        
+        try:
+            conn = mysql.connector.connect(**self.config)
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql, params)
+            results = cursor.fetchall()
+            
+            # Konvertiere datetime-Objekte zu Strings
+            for result in results:
+                if isinstance(result['timestamp'], datetime):
+                    result['timestamp'] = result['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+                elif hasattr(result['timestamp'], 'isoformat'):
+                    result['timestamp'] = result['timestamp'].isoformat()
+            
+            cursor.close()
+            conn.close()
+            return results
+        except Error as e:
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def getEnergySources(self):
+        """Holt alle verfügbaren Energiequellen"""
+        sql = "SELECT energy_source_id, name FROM energy_source ORDER BY name"
+        try:
+            conn = mysql.connector.connect(**self.config)
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return results
+        except Error as e:
+            print(f"Error: {e}")
+            return []
+
+    def getLatestData(self, energy_source=None):
+        """Holt die neuesten Daten für eine oder alle Energiequellen"""
+        if energy_source:
+            sql = """
+                SELECT ed.timestamp, ed.value, es.name as energy_source_name
+                FROM energy_data ed
+                JOIN energy_source es ON ed.energy_source_id = es.energy_source_id
+                WHERE es.name = %s
+                ORDER BY ed.timestamp DESC
+                LIMIT 1
+            """
+            params = [energy_source]
+        else:
+            sql = """
+                SELECT ed.timestamp, ed.value, es.name as energy_source_name
+                FROM energy_data ed
+                JOIN energy_source es ON ed.energy_source_id = es.energy_source_id
+                WHERE ed.timestamp = (SELECT MAX(timestamp) FROM energy_data)
+            """
+            params = []
+        
+        try:
+            conn = mysql.connector.connect(**self.config)
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(sql, params)
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return results
+        except Error as e:
+            print(f"Error: {e}")
+            return []

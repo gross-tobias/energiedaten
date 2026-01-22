@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energiedaten Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Energiedaten Dashboard</h1>
+        </header>
+        
+        <div class="controls-section">
+            <button id="fetchAllBtn" class="btn btn-primary">Daten aktualisieren</button>
+            <select id="chartTypeSelect" class="select-input">
+                <option value="line" selected>Liniendiagramm</option>
+                <option value="bar">Balkendiagramm</option>
+                <option value="radar">Radardiagramm</option>
+                <option value="pie">Kreisdiagramm</option>
+                <option value="doughnut">Ringdiagramm</option>
+            </select>
+            <label class="date-label">Von:</label>
+            <input type="date" id="startDateInput" class="date-input">
+            <label class="date-label">Bis:</label>
+            <input type="date" id="endDateInput" class="date-input">
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Solar Average</h3>
+                <div class="stat-value" id="solarValue">-</div>
+                <div class="stat-unit">kWh</div>
+            </div>
+            <div class="stat-card">
+                <h3>Wind Onshore Average</h3>
+                <div class="stat-value" id="windOnshoreValue">-</div>
+                <div class="stat-unit">kWh</div>
+            </div>
+            <div class="stat-card">
+                <h3>Wind Offshore Average</h3>
+                <div class="stat-value" id="windOffshoreValue">-</div>
+                <div class="stat-unit">kWh</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="energyChart"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="legend">
+                <label class="legend-item">
+                    <input type="checkbox" id="toggleSolar" checked>
+                    <span class="legend-color" style="background-color: #FFD700;"></span>
+                    <span>Solar</span>
+                </label>
+                <label class="legend-item">
+                    <input type="checkbox" id="toggleWindOnshore" checked>
+                    <span class="legend-color" style="background-color: #4CAF50;"></span>
+                    <span>Wind Onshore</span>
+                </label>
+                <label class="legend-item">
+                    <input type="checkbox" id="toggleWindOffshore" checked>
+                    <span class="legend-color" style="background-color: #2196F3;"></span>
+                    <span>Wind Offshore</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>Daten werden geladen...</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -32,3 +32,32 @@ _Fachinformatiker für Anwendungsentwicklung_
 - Datenbank: **MySQL**
 - Entwicklungsumgebung: **Visual Studio Code**
 - Versionsverwaltung: **GIT**
+
+<br>
+
+## Installation und Start
+
+### Schnellstart
+
+**1. Abhängigkeiten installieren:**
+```bash
+pip install -r requirements.txt
+```
+
+**2. Datenbank starten:**
+```bash
+docker-compose up -d
+```
+
+**3. Flask-Server starten:**
+```bash
+cd src/energiedaten
+python app.py
+```
+
+**4. Browser öffnen:**
+```
+http://localhost:5000
+```
+
+**Alternative:** Einfach `startfrontend.bat` doppelklicken (Windows)
