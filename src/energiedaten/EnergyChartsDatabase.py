@@ -42,7 +42,8 @@ class EnergyChartsDatabase:
             "INSERT INTO data_source (name, api_url) VALUES ('Energy Charts', 'https://api.energy-charts.info')",
             "INSERT INTO energy_source (name) VALUES ('Solar')",
             "INSERT INTO energy_source (name) VALUES ('Wind Onshore')",
-            "INSERT INTO energy_source (name) VALUES ('Wind Offshore')"
+            "INSERT INTO energy_source (name) VALUES ('Wind Offshore')",
+            "INSERT INTO energy_source (name) VALUES ('Renewable')"
         ]
         self._executeMany(commands)
 
