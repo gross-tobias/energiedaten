@@ -122,7 +122,7 @@ def debug_count():
         return jsonify({'error': str(e)}), 500
 
 def _savePowerData(data, energy_source):
-    """Speichert Power-Daten (kWh/MW) in der Datenbank"""
+    """Speichert Power-Daten (GW) in der Datenbank"""
     if not data:
         print(f"DEBUG: Keine Daten für {energy_source}")
         return False
@@ -136,7 +136,9 @@ def _savePowerData(data, energy_source):
     if isinstance(data, dict):
         if "unix_seconds" in data and "data" in data:
             unix_times = data["unix_seconds"]
-            values = data["data"]
+            for type in data['production_types']:
+                if type['name'] == energy_source:
+                    values = type["data"]
         elif "unix_timestamps" in data and "data" in data:
             unix_times = data["unix_timestamps"]
             values = data["data"]
@@ -208,7 +210,7 @@ def _savePowerData(data, energy_source):
 def fetch_solar():
     """Lädt Solar-Daten (kWh) von der API und speichert sie in der DB"""
     try:
-        data = client.getPublicPower(country="de", subtype="solar")
+        data = client.getPublicPower(country="de", subtype="Solar")
         success = _savePowerData(data, "Solar")
         if success:
             return jsonify({'success': True, 'message': 'Solar-Daten erfolgreich geladen'})
@@ -221,7 +223,7 @@ def fetch_solar():
 def fetch_wind_onshore():
     """Lädt Wind Onshore-Daten (kWh) von der API und speichert sie in der DB"""
     try:
-        data = client.getPublicPower(country="de", subtype="wind_onshore")
+        data = client.getPublicPower(country="de", subtype="Wind_onshore")
         success = _savePowerData(data, "Wind Onshore")
         if success:
             return jsonify({'success': True, 'message': 'Wind Onshore-Daten erfolgreich geladen'})
@@ -234,7 +236,7 @@ def fetch_wind_onshore():
 def fetch_wind_offshore():
     """Lädt Wind Offshore-Daten (kWh) von der API und speichert sie in der DB"""
     try:
-        data = client.getPublicPower(country="de", subtype="wind_offshore")
+        data = client.getPublicPower(country="de", subtype="Wind_offshore")
         success = _savePowerData(data, "Wind Offshore")
         if success:
             return jsonify({'success': True, 'message': 'Wind Offshore-Daten erfolgreich geladen'})
@@ -254,7 +256,7 @@ def fetch_all():
             print("DEBUG: Lade Solar-Daten...")
             # Versuche zuerst getPublicPower
             try:
-                data = client.getPublicPower(country="de", subtype="solar")
+                data = client.getPublicPower(country="de", subtype="Wolar")
                 print(f"DEBUG: getPublicPower Solar Antwort: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
                 success = _savePowerData(data, "Solar")
             except Exception as e1:
@@ -278,7 +280,7 @@ def fetch_all():
         try:
             print("DEBUG: Lade Wind Onshore-Daten...")
             try:
-                data = client.getPublicPower(country="de", subtype="wind_onshore")
+                data = client.getPublicPower(country="de", subtype="Wind_onshore")
                 success = _savePowerData(data, "Wind Onshore")
             except Exception as e1:
                 print(f"DEBUG: getPublicPower Wind Onshore fehlgeschlagen: {e1}")
@@ -299,7 +301,7 @@ def fetch_all():
         try:
             print("DEBUG: Lade Wind Offshore-Daten...")
             try:
-                data = client.getPublicPower(country="de", subtype="wind_offshore")
+                data = client.getPublicPower(country="de", subtype="Wind_offshore")
                 success = _savePowerData(data, "Wind Offshore")
             except Exception as e1:
                 print(f"DEBUG: getPublicPower Wind Offshore fehlgeschlagen: {e1}")
