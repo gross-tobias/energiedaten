@@ -152,7 +152,7 @@ function initializeChart() {
                         if (label) {
                             label += ': ';
                         }
-                        label += context.parsed.y ? context.parsed.y.toFixed(2) + ' kWh' : context.parsed;
+                        label += context.parsed.y ? context.parsed.y.toFixed(2) + ' GW' : context.parsed;
                         return label;
                     }
                 }
@@ -187,12 +187,12 @@ function initializeChart() {
                 display: true,
                 title: {
                     display: true,
-                    text: 'Energie (kWh)'
+                    text: 'Energie (GW)'
                 },
                 beginAtZero: true,
                 ticks: {
                     callback: function(value) {
-                        return value.toFixed(0) + ' kWh';
+                        return value.toFixed(0) + ' GW';
                     }
                 }
             }
@@ -386,9 +386,10 @@ function updateChart(data) {
         Object.keys(data).forEach(sourceName => {
             const sourceData = data[sourceName];
             const sum = sourceData.values.reduce((acc, val) => acc + (val || 0), 0);
+            const average = sum / sourceData.values.length;
             if (sum > 0) {
-                labels.push(sourceName);
-                values.push(sum);
+                labels.push(sourceName + " (GW)");
+                values.push(average);
                 backgroundColors.push(colors[sourceName] || '#000000');
             }
         });

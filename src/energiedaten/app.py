@@ -256,7 +256,7 @@ def fetch_all():
             print("DEBUG: Lade Solar-Daten...")
             # Versuche zuerst getPublicPower
             try:
-                data = client.getPublicPower(country="de", subtype="Wolar")
+                data = client.getPublicPower(country="de", subtype="Solar")
                 print(f"DEBUG: getPublicPower Solar Antwort: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
                 success = _savePowerData(data, "Solar")
             except Exception as e1:
