@@ -5,6 +5,18 @@ echo.
 cd /d "%~dp0"
 cd src\energiedaten
 
+REM --- Lade .env (Docker MySQL) und mappe auf App-Variablen ---
+if exist "..\..\.env" (
+  for /f "usebackq tokens=1,* delims== eol=#" %%A in ("..\..\.env") do (
+    if not "%%A"=="" set "%%A=%%B"
+  )
+)
+
+if defined MYSQL_DATABASE set "DB_NAME=%MYSQL_DATABASE%"
+if defined MYSQL_ROOT_PASSWORD set "DB_PASSWORD=%MYSQL_ROOT_PASSWORD%"
+if not defined DB_HOST set "DB_HOST=127.0.0.1"
+if not defined DB_USER set "DB_USER=root"
+
 echo Pruefe Python-Installation...
 python --version >nul 2>&1
 if errorlevel 1 (

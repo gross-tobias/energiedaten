@@ -19,6 +19,17 @@ DB_CONFIG = {
 db = EnergyChartsDatabase(**DB_CONFIG)
 client = EnergyChartsClient()
 
+def _parse_date_arg(value):
+    if not value:
+        return None
+    value = str(value).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
 @app.route('/')
 def index():
     """Serve the main frontend page"""
@@ -38,13 +49,28 @@ def get_energy_data():
     """Holt Energiedaten mit optionalen Filtern"""
     try:
         energy_source = request.args.get('source')
-        start_date = request.args.get('start')
-        end_date = request.args.get('end')
+        start_date_raw = request.args.get('start')
+        end_date_raw = request.args.get('end')
+
+        start_dt = _parse_date_arg(start_date_raw)
+        end_dt = _parse_date_arg(end_date_raw)
+
+        # If end date is given as YYYY-MM-DD, treat it as inclusive end-of-day
+        if end_dt and isinstance(end_date_raw, str) and len(end_date_raw.strip()) == 10:
+            end_dt = end_dt.replace(hour=23, minute=59, second=59)
+
+        # Clamp to yesterday end-of-day (today may be incomplete)
+        today = datetime.now()
+        yesterday_eod = (today - timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=0)
+        if end_dt and end_dt > yesterday_eod:
+            end_dt = yesterday_eod
+        if not end_dt and end_date_raw:
+            end_dt = yesterday_eod
         
         data = db.getEnergyData(
             energy_source=energy_source,
-            start_date=start_date,
-            end_date=end_date
+            start_date=start_dt.strftime("%Y-%m-%d %H:%M:%S") if start_dt else None,
+            end_date=end_dt.strftime("%Y-%m-%d %H:%M:%S") if end_dt else None
         )
         
         print(f"DEBUG: Gefundene Datensätze: {len(data)}")

@@ -12,11 +12,121 @@ let hasShownNoDataMessage = false;
 // Monatsnamen auf Deutsch
 const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
+function isDatasetToggleLocked() {
+    // Requested: for bar + doughnut, always show all datasets (no hide)
+    return currentChartType === 'bar' || currentChartType === 'doughnut';
+}
+
+function updateDatasetLegendUI() {
+    const legend = document.getElementById('datasetLegend');
+    if (!legend) return;
+
+    const locked = isDatasetToggleLocked();
+    legend.classList.toggle('locked', locked);
+
+    const ids = ['toggleSolar', 'toggleWindOnshore', 'toggleWindOffshore'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.checked = true;
+        el.disabled = locked;
+    });
+
+    // Ensure datasets are visible when locked
+    if (locked && energyChart?.data?.datasets) {
+        energyChart.data.datasets.forEach((ds) => {
+            ds.hidden = false;
+        });
+        energyChart.update();
+    }
+}
+
+function parseYyyyMmDd(dateString) {
+    // dateString expected: YYYY-MM-DD (from backend)
+    return new Date(`${dateString}T00:00:00`);
+}
+
+function formatDdMm(date) {
+    return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function startOfWeekMonday(date) {
+    // JS: 0=Sun..6=Sat. We want Monday as start.
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = (day === 0 ? -6 : 1) - day; // move to Monday
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+function addDays(date, days) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+}
+
+function buildWeekRangesByStartIndex(labels) {
+    // Returns Map<startIndex, { start: Date, end: Date }>
+    const map = new Map();
+    if (!labels || labels.length === 0) return map;
+
+    let prevWeekStartKey = null;
+    for (let i = 0; i < labels.length; i++) {
+        const d = parseYyyyMmDd(labels[i]);
+        if (isNaN(d.getTime())) continue;
+        const weekStart = startOfWeekMonday(d);
+        const key = weekStart.toISOString().slice(0, 10);
+        if (key === prevWeekStartKey) continue;
+        prevWeekStartKey = key;
+
+        const weekEndCandidate = addDays(weekStart, 6);
+        const lastDate = parseYyyyMmDd(labels[labels.length - 1]);
+        const weekEnd = weekEndCandidate > lastDate ? lastDate : weekEndCandidate;
+        map.set(i, { start: weekStart, end: weekEnd });
+    }
+    return map;
+}
+
+const adaptiveTimeTicksPlugin = {
+    id: 'adaptiveTimeTicks',
+    afterBuildTicks(chart, args, pluginOptions) {
+        const scale = args.scale;
+        if (!scale || scale.id !== 'x') return;
+        if (!chart?.data?.labels || chart.data.labels.length === 0) return;
+
+        const labels = chart.data.labels;
+        const width = scale.width || chart.chartArea?.width || 0;
+        const minPxPerDay = pluginOptions?.minPxPerDay ?? 18;
+
+        const pxPerDay = width / Math.max(labels.length, 1);
+        const mode = pxPerDay >= minPxPerDay ? 'day' : 'week';
+
+        chart.$xAxisMode = mode;
+
+        if (mode === 'day') {
+            chart.$weekRangesByStartIndex = null;
+            chart.options.scales.x.title.text = 'Tag';
+            return;
+        }
+
+        const weekRangesByStartIndex = buildWeekRangesByStartIndex(labels);
+        chart.$weekRangesByStartIndex = weekRangesByStartIndex;
+        chart.options.scales.x.title.text = 'Woche';
+
+        // Only show ticks at week starts
+        scale.ticks = Array.from(weekRangesByStartIndex.keys()).map((idx) => ({ value: idx }));
+    }
+};
+
+Chart.register(adaptiveTimeTicksPlugin);
+
 // Initialisierung beim Laden der Seite
 document.addEventListener('DOMContentLoaded', () => {
+    setupEventListeners(); // sets default dates BEFORE first load
     initializeChart();
+    updateDatasetLegendUI();
     loadData();
-    setupEventListeners();
 });
 
 function setupEventListeners() {
@@ -35,15 +145,6 @@ function setupEventListeners() {
             const response = await fetch(`${API_BASE}/fetch-all`);
             const result = await response.json();
             if (result.success) {
-                let message = 'Daten erfolgreich aktualisiert!\n\n';
-                if (result.results) {
-                    message += 'Ergebnisse:\n';
-                    Object.keys(result.results).forEach(key => {
-                        message += `- ${key}: ${result.results[key]}\n`;
-                    });
-                }
-                alert(message);
-                
                 // Zurücksetzen des Flags, damit Nachricht wieder angezeigt werden kann
                 hasShownNoDataMessage = false;
                 
@@ -52,11 +153,10 @@ function setupEventListeners() {
                     loadData();
                 }, 2000);
             } else {
-                alert('Fehler beim Aktualisieren der Daten: ' + (result.error || 'Unbekannter Fehler'));
+                console.error('Fehler beim Aktualisieren der Daten:', result.error || 'Unbekannter Fehler');
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Fehler beim Aktualisieren der Daten: ' + error.message);
         } finally {
             hideLoading();
             btn.disabled = false;
@@ -67,10 +167,12 @@ function setupEventListeners() {
     // Diagrammtyp ändern
     document.getElementById('chartTypeSelect').addEventListener('change', (e) => {
         currentChartType = e.target.value;
+        updateDatasetLegendUI();
         if (energyChart) {
             energyChart.destroy();
         }
         initializeChart();
+        updateDatasetLegendUI();
         loadData();
     });
 
@@ -78,13 +180,21 @@ function setupEventListeners() {
     const startDateInput = document.getElementById('startDateInput');
     const endDateInput = document.getElementById('endDateInput');
     
-    // Setze Standardwerte (letzte 30 Tage)
+    // Setze Standardwerte (letzte 30 Tage) – max. bis gestern, da "heute" oft noch nicht vollständig verfügbar ist
     const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(today.getDate() - 30);
-    
-    endDateInput.value = today.toISOString().split('T')[0];
-    startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const thirtyDaysAgo = new Date(yesterday);
+    thirtyDaysAgo.setDate(yesterday.getDate() - 30);
+
+    const yesterdayIso = yesterday.toISOString().split('T')[0];
+    const thirtyDaysAgoIso = thirtyDaysAgo.toISOString().split('T')[0];
+
+    endDateInput.max = yesterdayIso;
+    startDateInput.max = yesterdayIso;
+
+    endDateInput.value = yesterdayIso;
+    startDateInput.value = thirtyDaysAgoIso;
     
     startDateInput.addEventListener('change', () => {
         if (startDateInput.value && endDateInput.value) {
@@ -99,9 +209,13 @@ function setupEventListeners() {
     
     endDateInput.addEventListener('change', () => {
         if (startDateInput.value && endDateInput.value) {
+            // Clamp to yesterday
+            if (new Date(endDateInput.value) > new Date(yesterdayIso)) {
+                endDateInput.value = yesterdayIso;
+            }
             if (new Date(startDateInput.value) > new Date(endDateInput.value)) {
                 alert('Startdatum muss vor dem Enddatum liegen!');
-                endDateInput.value = today.toISOString().split('T')[0];
+                endDateInput.value = yesterdayIso;
                 return;
             }
             loadData();
@@ -156,6 +270,22 @@ function initializeChart() {
                         return label;
                     }
                 }
+            },
+            zoom: {
+                pan: {
+                    enabled: !isPieChart,
+                    mode: 'x',
+                    modifierKey: 'shift'
+                },
+                zoom: {
+                    wheel: { enabled: !isPieChart },
+                    pinch: { enabled: !isPieChart },
+                    mode: 'x'
+                }
+            },
+            adaptiveTimeTicks: {
+                // Switch to weekly labels when too tight
+                minPxPerDay: 18
             }
         }
     };
@@ -177,8 +307,23 @@ function initializeChart() {
                 ticks: {
                     maxRotation: 45,
                     minRotation: 45,
+                    autoSkip: true,
                     callback: function(value, index) {
                         const label = this.getLabelForValue(value);
+                        const chart = this?.chart;
+
+                        // Weekly mode: show ranges like "Daten DD.MM bis DD.MM"
+                        if (chart?.$xAxisMode === 'week' && chart.$weekRangesByStartIndex instanceof Map) {
+                            const range = chart.$weekRangesByStartIndex.get(value);
+                            if (!range) return '';
+                            return `Daten ${formatDdMm(range.start)} bis ${formatDdMm(range.end)}`;
+                        }
+
+                        // Day mode: show DD.MM
+                        const d = parseYyyyMmDd(label);
+                        if (!isNaN(d.getTime())) {
+                            return formatDdMm(d);
+                        }
                         return label;
                     }
                 }
@@ -228,24 +373,14 @@ async function loadData() {
         
         let startDate = startDateInput.value || null;
         let endDate = endDateInput.value || null;
-        
-        // End-Datum auf Ende des Tages setzen (23:59:59)
-        if (endDate) {
-            endDate = endDate + ' 23:59:59';
-        }
 
         // Daten laden
         let url = `${API_BASE}/energy-data`;
-        const params = [];
-        if (startDate) {
-            params.push(`start=${startDate}`);
-        }
-        if (endDate) {
-            params.push(`end=${endDate}`);
-        }
-        if (params.length > 0) {
-            url += '?' + params.join('&');
-        }
+        const params = new URLSearchParams();
+        if (startDate) params.set('start', startDate);
+        if (endDate) params.set('end', endDate);
+        const qs = params.toString();
+        if (qs) url += `?${qs}`;
 
         const response = await fetch(url);
         const data = await response.json();
@@ -268,7 +403,7 @@ async function loadData() {
                 const message = 'Keine Daten in der Datenbank gefunden.\n\n' +
                               'Bitte klicken Sie auf "Daten aktualisieren" um Daten von der Energy Charts API zu laden.\n\n' +
                               'Dies kann einige Sekunden dauern.';
-                alert(message);
+                console.warn(message.replace(/\n+/g, ' '));
             }
             return;
         }
@@ -284,7 +419,6 @@ async function loadData() {
 
     } catch (error) {
         console.error('Error loading data:', error);
-        alert('Fehler beim Laden der Daten: ' + error.message);
     } finally {
         hideLoading();
         isLoadingData = false;
@@ -335,7 +469,7 @@ function calculateTimeRange() {
     const endDateInput = document.getElementById('endDateInput');
     
     if (!startDateInput.value || !endDateInput.value) {
-        return { days: 30, type: 'month' };
+        return { days: 30, type: 'day' };
     }
     
     const start = new Date(startDateInput.value);
@@ -343,15 +477,8 @@ function calculateTimeRange() {
     const diffTime = Math.abs(end - start);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays <= 7) {
-        return { days: diffDays, type: 'day' };
-    } else if (diffDays <= 90) {
-        return { days: diffDays, type: 'month' };
-    } else if (diffDays <= 365) {
-        return { days: diffDays, type: 'year' };
-    } else {
-        return { days: diffDays, type: 'year' };
-    }
+    // Always keep daily data; axis labels will adapt to weekly ranges when space is tight.
+    return { days: diffDays, type: 'day' };
 }
 
 function formatLabel(dateString, timeRangeType) {
@@ -374,7 +501,6 @@ function updateChart(data) {
     };
 
     const isPieChart = currentChartType === 'pie' || currentChartType === 'doughnut';
-    const timeRange = calculateTimeRange();
     
     if (isPieChart) {
         // Für Kreisdiagramme: Summe aller Werte pro Energiequelle
@@ -413,80 +539,14 @@ function updateChart(data) {
         let processedLabels = [];
         let processedData = {};
 
-        if (timeRange.type === 'day') {
-            // Bei Tagen: Zeige einzelne Tage
-            processedLabels = sortedLabels;
-            Object.keys(data).forEach(sourceName => {
-                processedData[sourceName] = {
-                    labels: data[sourceName].labels,
-                    values: data[sourceName].values
-                };
-            });
-        } else if (timeRange.type === 'month') {
-            // Bei Monaten: Gruppiere nach Monaten
-            const monthlyData = {};
-            Object.keys(data).forEach(sourceName => {
-                monthlyData[sourceName] = groupDataByMonth(data[sourceName].labels, data[sourceName].values);
-            });
-
-            const allMonths = new Set();
-            Object.values(monthlyData).forEach(source => {
-                source.labels.forEach(month => allMonths.add(month));
-            });
-            
-            processedLabels = Array.from(allMonths).sort((a, b) => {
-                const partsA = a.split(' ');
-                const partsB = b.split(' ');
-                if (partsA.length !== 2 || partsB.length !== 2) return a.localeCompare(b);
-                
-                const [monthA, yearA] = partsA;
-                const [monthB, yearB] = partsB;
-                const yearNumA = parseInt(yearA);
-                const yearNumB = parseInt(yearB);
-                
-                if (yearNumA !== yearNumB) return yearNumA - yearNumB;
-                
-                const monthIndexA = monthNames.indexOf(monthA);
-                const monthIndexB = monthNames.indexOf(monthB);
-                return monthIndexA - monthIndexB;
-            });
-            
-            Object.keys(monthlyData).forEach(sourceName => {
-                processedData[sourceName] = monthlyData[sourceName];
-            });
-        } else {
-            // Bei Jahren: Zeige alle 12 Monate
-            const monthlyData = {};
-            Object.keys(data).forEach(sourceName => {
-                monthlyData[sourceName] = groupDataByMonth(data[sourceName].labels, data[sourceName].values);
-            });
-
-            const allMonths = new Set();
-            Object.values(monthlyData).forEach(source => {
-                source.labels.forEach(month => allMonths.add(month));
-            });
-            
-            processedLabels = Array.from(allMonths).sort((a, b) => {
-                const partsA = a.split(' ');
-                const partsB = b.split(' ');
-                if (partsA.length !== 2 || partsB.length !== 2) return a.localeCompare(b);
-                
-                const [monthA, yearA] = partsA;
-                const [monthB, yearB] = partsB;
-                const yearNumA = parseInt(yearA);
-                const yearNumB = parseInt(yearB);
-                
-                if (yearNumA !== yearNumB) return yearNumA - yearNumB;
-                
-                const monthIndexA = monthNames.indexOf(monthA);
-                const monthIndexB = monthNames.indexOf(monthB);
-                return monthIndexA - monthIndexB;
-            });
-            
-            Object.keys(monthlyData).forEach(sourceName => {
-                processedData[sourceName] = monthlyData[sourceName];
-            });
-        }
+        // Always keep daily labels; axis will adapt to weekly ranges when space is tight.
+        processedLabels = sortedLabels;
+        Object.keys(data).forEach(sourceName => {
+            processedData[sourceName] = {
+                labels: data[sourceName].labels,
+                values: data[sourceName].values
+            };
+        });
 
         // Datasets erstellen
         const datasets = [];
@@ -531,18 +591,7 @@ function updateChart(data) {
     
     // X-Achse aktualisieren mit gestrichelten Linien und Titel
     if (!isPieChart && energyChart) {
-        const timeRange = calculateTimeRange();
-        let xAxisTitle = 'Zeitraum';
-        
-        if (timeRange.type === 'day') {
-            xAxisTitle = 'Tag';
-        } else if (timeRange.type === 'month') {
-            xAxisTitle = 'Monat';
-        } else {
-            xAxisTitle = 'Monat';
-        }
-        
-        energyChart.options.scales.x.title.text = xAxisTitle;
+        // Title is updated dynamically by adaptive ticks plugin (Tag/Woche).
         energyChart.options.scales.x.grid = {
             display: true,
             drawBorder: false,
@@ -607,6 +656,10 @@ function calculateAverages(data) {
 }
 
 function toggleDataset(sourceName, visible) {
+    if (isDatasetToggleLocked()) {
+        updateDatasetLegendUI();
+        return;
+    }
     const dataset = energyChart.data.datasets.find(ds => ds.label === sourceName);
     if (dataset) {
         dataset.hidden = !visible;

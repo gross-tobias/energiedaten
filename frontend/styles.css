@@ -19,6 +19,10 @@
   --transition: all 0.2s ease;
 }
 
+.hidden {
+  display: none !important;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -217,6 +221,18 @@ header h1 {
 
 .legend-item:hover {
   background-color: var(--color-background);
+}
+
+.legend.locked .legend-item {
+  cursor: default;
+}
+
+.legend.locked .legend-item:hover {
+  background-color: transparent;
+}
+
+.legend.locked input[type="checkbox"] {
+  display: none;
 }
 
 .legend-item input[type="checkbox"] {
