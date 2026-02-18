@@ -127,6 +127,19 @@ def get_latest_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/fetch-all')
+def fetch_all():
+    data = client.getInstalledPower("de", "monthly")
+    _savePowerData(data, "Solar DC")
+    _savePowerData(data, "Solar AC")
+    _savePowerData(data, "Wind onshore")
+    _savePowerData(data, "Wind offshore")
+    results = {}
+    results['solar'] = 'success'
+    results['wind_onshore'] = 'success'
+    results['wind_offshore'] = 'success'
+    return jsonify({'success': True, 'results': results})
+
 @app.route('/api/debug/count')
 def debug_count():
     """Debug-Endpoint: Zählt Datensätze in der Datenbank"""
@@ -152,203 +165,27 @@ def _savePowerData(data, energy_source):
     if not data:
         print(f"DEBUG: Keine Daten für {energy_source}")
         return False
-    
-    print(f"DEBUG: Datenformat für {energy_source}: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
-    
-    # Prüfe verschiedene Datenformate der API
+      
     unix_times = None
     values = None
     
-    if isinstance(data, dict):
-        if "unix_seconds" in data and "data" in data:
-            unix_times = data["unix_seconds"]
-            for type in data['production_types']:
-                if type['name'] == energy_source:
-                    values = type["data"]
-        elif "unix_timestamps" in data and "data" in data:
-            unix_times = data["unix_timestamps"]
-            values = data["data"]
-        elif "timestamps" in data and "data" in data:
-            unix_times = data["timestamps"]
-            values = data["data"]
-        elif "days" in data and "data" in data:
-            # Fallback auf Daily Average Format
-            print(f"DEBUG: Verwende Daily Average Format für {energy_source}")
-            db.saveDailyAverage(data, energy_source)
-            return True
-    elif isinstance(data, list) and len(data) > 0:
-        # Alternative Format
-        unix_times = [item.get("timestamp", item.get("unix_seconds")) for item in data]
-        values = [item.get("value", item.get("data")) for item in data]
+    if "time" in data and "production_types" in data:
+        unix_times = data["time"]
+        for type in data['production_types']:
+            if type['name'] == energy_source:
+                values = type["data"]
     
     if not unix_times or not values:
         print(f"DEBUG: Keine Zeitstempel oder Werte für {energy_source}")
-        # Versuche Daily Average Format als Fallback
-        if isinstance(data, dict) and "days" in data:
-            print(f"DEBUG: Versuche Daily Average Format für {energy_source}")
-            db.saveDailyAverage(data, energy_source)
-            return True
         return False
     
     try:
-        sql = "SELECT data_source_id FROM data_source WHERE name = 'Energy Charts'"
-        result = db._executeSelect(sql)
-        if not result:
-            return False
-        data_source_id = result[0][0]
-        
-        sql = f"SELECT energy_source_id FROM energy_source WHERE name = '{energy_source}'"
-        result = db._executeSelect(sql)
-        if not result:
-            return False
-        energy_source_id = result[0][0]
-        
-        records = []
-        for timestamp, val in zip(unix_times, values):
-            if val is not None and val != 0:
-                try:
-                    if isinstance(timestamp, (int, float)):
-                        dt = datetime.fromtimestamp(timestamp)
-                    else:
-                        dt = datetime.fromisoformat(str(timestamp))
-                    records.append((
-                        dt,
-                        float(val),
-                        energy_source_id,
-                        data_source_id
-                    ))
-                except Exception as e:
-                    print(f"Fehler beim Parsen von Timestamp: {e}")
-                    continue
-        
-        if records:
-            sql = "INSERT IGNORE INTO energy_data (timestamp, value, energy_source_id, data_source_id) VALUES (%s, %s, %s, %s)"
-            db._executeBatch(sql, records)
-            print(f"{len(records)} Datensätze für {energy_source} gespeichert")
-        return len(records) > 0
+        db.saveEnergyData(energy_source, unix_times, values)
     except Exception as e:
         print(f"Error saving power data for {energy_source}: {e}")
         import traceback
         traceback.print_exc()
         return False
-
-@app.route('/api/fetch-solar')
-def fetch_solar():
-    """Lädt Solar-Daten (kWh) von der API und speichert sie in der DB"""
-    try:
-        data = client.getPublicPower(country="de", subtype="Solar")
-        success = _savePowerData(data, "Solar")
-        if success:
-            return jsonify({'success': True, 'message': 'Solar-Daten erfolgreich geladen'})
-        else:
-            return jsonify({'error': 'Keine Daten erhalten'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/fetch-wind-onshore')
-def fetch_wind_onshore():
-    """Lädt Wind Onshore-Daten (kWh) von der API und speichert sie in der DB"""
-    try:
-        data = client.getPublicPower(country="de", subtype="Wind_onshore")
-        success = _savePowerData(data, "Wind Onshore")
-        if success:
-            return jsonify({'success': True, 'message': 'Wind Onshore-Daten erfolgreich geladen'})
-        else:
-            return jsonify({'error': 'Keine Daten erhalten'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/fetch-wind-offshore')
-def fetch_wind_offshore():
-    """Lädt Wind Offshore-Daten (kWh) von der API und speichert sie in der DB"""
-    try:
-        data = client.getPublicPower(country="de", subtype="Wind_offshore")
-        success = _savePowerData(data, "Wind Offshore")
-        if success:
-            return jsonify({'success': True, 'message': 'Wind Offshore-Daten erfolgreich geladen'})
-        else:
-            return jsonify({'error': 'Keine Daten erhalten'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/fetch-all')
-def fetch_all():
-    """Lädt alle verfügbaren Daten (kWh) von der API"""
-    try:
-        results = {}
-        
-        # Solar - versuche verschiedene API-Endpunkte
-        try:
-            print("DEBUG: Lade Solar-Daten...")
-            # Versuche zuerst getPublicPower
-            try:
-                data = client.getPublicPower(country="de", subtype="Solar")
-                print(f"DEBUG: getPublicPower Solar Antwort: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
-                success = _savePowerData(data, "Solar")
-            except Exception as e1:
-                print(f"DEBUG: getPublicPower fehlgeschlagen: {e1}")
-                success = False
-            
-            if not success:
-                # Fallback: verwende Share-Daten
-                print("DEBUG: Verwende SolarShareDailyAvg als Fallback...")
-                data = client.getSolarShareDailyAvg()
-                print(f"DEBUG: SolarShareDailyAvg Antwort: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
-                success = db.saveDailyAverage(data, "Solar")
-            results['solar'] = 'success' if success else 'no data'
-        except Exception as e:
-            print(f"Error fetching solar: {e}")
-            import traceback
-            traceback.print_exc()
-            results['solar'] = str(e)
-        
-        # Wind Onshore
-        try:
-            print("DEBUG: Lade Wind Onshore-Daten...")
-            try:
-                data = client.getPublicPower(country="de", subtype="Wind_onshore")
-                success = _savePowerData(data, "Wind Onshore")
-            except Exception as e1:
-                print(f"DEBUG: getPublicPower Wind Onshore fehlgeschlagen: {e1}")
-                success = False
-            
-            if not success:
-                print("DEBUG: Verwende WindOnshoreShareDailyAvg als Fallback...")
-                data = client.getWindOnshoreShareDailyAvg()
-                success = db.saveDailyAverage(data, "Wind Onshore")
-            results['wind_onshore'] = 'success' if success else 'no data'
-        except Exception as e:
-            print(f"Error fetching wind onshore: {e}")
-            import traceback
-            traceback.print_exc()
-            results['wind_onshore'] = str(e)
-        
-        # Wind Offshore
-        try:
-            print("DEBUG: Lade Wind Offshore-Daten...")
-            try:
-                data = client.getPublicPower(country="de", subtype="Wind_offshore")
-                success = _savePowerData(data, "Wind Offshore")
-            except Exception as e1:
-                print(f"DEBUG: getPublicPower Wind Offshore fehlgeschlagen: {e1}")
-                success = False
-            
-            if not success:
-                print("DEBUG: Verwende WindOffshoreShareDailyAvg als Fallback...")
-                data = client.getWindOffshoreShareDailyAvg()
-                success = db.saveDailyAverage(data, "Wind Offshore")
-            results['wind_offshore'] = 'success' if success else 'no data'
-        except Exception as e:
-            print(f"Error fetching wind offshore: {e}")
-            import traceback
-            traceback.print_exc()
-            results['wind_offshore'] = str(e)
-        
-        return jsonify({'success': True, 'results': results})
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

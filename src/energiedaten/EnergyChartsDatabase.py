@@ -11,7 +11,6 @@ class EnergyChartsDatabase:
             'password': password,
             'database': database
         }
-        self._createTables()
 
     def _createTables(self):
         commands = [
@@ -40,59 +39,12 @@ class EnergyChartsDatabase:
             )
             """,
             "INSERT INTO data_source (name, api_url) VALUES ('Energy Charts', 'https://api.energy-charts.info')",
-            "INSERT INTO energy_source (name) VALUES ('Solar')",
+            "INSERT INTO energy_source (name) VALUES ('Solar DC')",
+            "INSERT INTO energy_source (name) VALUES ('Solar AC')",
             "INSERT INTO energy_source (name) VALUES ('Wind Onshore')",
             "INSERT INTO energy_source (name) VALUES ('Wind Offshore')",
-            "INSERT INTO energy_source (name) VALUES ('Renewable')"
         ]
         self._executeMany(commands)
-
-    def saveDailyAverage(self, data, energy_source):
-        if not data or "days" not in data:
-           print(f"DEBUG: Keine gültigen Daily Average Daten für {energy_source}")
-           return False
-
-        try:
-            sql = "SELECT data_source_id FROM data_source WHERE name = 'Energy Charts'"
-            result = self._executeSelect(sql)
-            if not result:
-                print(f"DEBUG: Keine data_source gefunden")
-                return False
-            data_source_id = result[0][0]
-
-            sql = f"SELECT energy_source_id FROM energy_source WHERE name = '{energy_source}'"
-            result = self._executeSelect(sql)
-            if not result:
-                print(f"DEBUG: Keine energy_source '{energy_source}' gefunden")
-                return False
-            energy_source_id = result[0][0]
-
-            records = []
-            for day, val in zip(data["days"], data["data"]):
-                if val is not None:
-                    try:
-                        records.append((
-                            datetime.strptime(day, "%d.%m.%Y"),
-                            float(val),
-                            energy_source_id,
-                            data_source_id))
-                    except Exception as e:
-                        print(f"DEBUG: Fehler beim Parsen von Tag {day}: {e}")
-                        continue
-
-            if records:
-                sql = "INSERT IGNORE INTO energy_data (timestamp, value, energy_source_id, data_source_id) VALUES (%s, %s, %s, %s)"
-                self._executeBatch(sql, records)
-                print(f"DEBUG: {len(records)} Datensätze für {energy_source} gespeichert (Daily Average)")
-                return True
-            else:
-                print(f"DEBUG: Keine Datensätze zum Speichern für {energy_source}")
-                return False
-        except Exception as e:
-            print(f"DEBUG: Fehler beim Speichern von Daily Average für {energy_source}: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
 
     def _executeSelect(self, sql):
         try:
@@ -128,6 +80,47 @@ class EnergyChartsDatabase:
             conn.close()
         except Error as e:
             print(f"Database setup error: {e}")
+
+    def saveEnergyData(self, energy_source, unix_times, values):
+        sql = "SELECT data_source_id FROM data_source WHERE name = 'Energy Charts'"
+        result = self._executeSelect(sql)
+        if not result:
+            return False
+        data_source_id = result[0][0]
+        
+        sql = f"SELECT energy_source_id FROM energy_source WHERE name = '{energy_source}'"
+        result = self._executeSelect(sql)
+        if not result:
+            return False
+        energy_source_id = result[0][0]
+        
+        records = []
+        for timestamp, val in zip(unix_times, values):
+            if val is not None and val != 0:
+                try:
+                    if isinstance(timestamp, (int, float)):
+                        dt = datetime.fromtimestamp(timestamp)
+                    else:
+                        try:
+                            dt = datetime.strptime(str(timestamp), '%m.%Y')
+                        except ValueError:
+                            dt = datetime.fromisoformat(str(timestamp))
+                        
+                    records.append((
+                        dt,
+                        float(val),
+                        energy_source_id,
+                        data_source_id
+                    ))
+                except Exception as e:
+                    print(f"Fehler beim Parsen von Timestamp: {e}")
+                    continue
+        
+        if records:
+            sql = "INSERT IGNORE INTO energy_data (timestamp, value, energy_source_id, data_source_id) VALUES (%s, %s, %s, %s)"
+            self._executeBatch(sql, records)
+            print(f"{len(records)} Datensätze für {energy_source} gespeichert")
+        return len(records) > 0
 
     def getEnergyData(self, energy_source=None, start_date=None, end_date=None):
         """Holt Energiedaten aus der Datenbank"""
