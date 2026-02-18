@@ -13,8 +13,8 @@ let hasShownNoDataMessage = false;
 const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 function isDatasetToggleLocked() {
-    // Requested: for bar + doughnut, always show all datasets (no hide)
-    return currentChartType === 'bar' || currentChartType === 'doughnut';
+    // For pie + doughnut, always show all sources (no hide)
+    return currentChartType === 'pie' || currentChartType === 'doughnut';
 }
 
 function updateDatasetLegendUI() {
@@ -28,8 +28,10 @@ function updateDatasetLegendUI() {
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
-        el.checked = true;
         el.disabled = locked;
+        if (locked) {
+            el.checked = true;
+        }
     });
 
     // Ensure datasets are visible when locked
@@ -96,6 +98,13 @@ const adaptiveTimeTicksPlugin = {
         if (!chart?.data?.labels || chart.data.labels.length === 0) return;
 
         const labels = chart.data.labels;
+        // Only apply this plugin to daily date labels (YYYY-MM-DD).
+        // For hourly labels like "13:00" we keep Chart.js defaults.
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(labels[0] ?? ''))) {
+            chart.$xAxisMode = 'raw';
+            chart.$weekRangesByStartIndex = null;
+            return;
+        }
         const width = scale.width || chart.chartArea?.width || 0;
         const minPxPerDay = pluginOptions?.minPxPerDay ?? 18;
 
@@ -106,13 +115,11 @@ const adaptiveTimeTicksPlugin = {
 
         if (mode === 'day') {
             chart.$weekRangesByStartIndex = null;
-            chart.options.scales.x.title.text = 'Tag';
             return;
         }
 
         const weekRangesByStartIndex = buildWeekRangesByStartIndex(labels);
         chart.$weekRangesByStartIndex = weekRangesByStartIndex;
-        chart.options.scales.x.title.text = 'Woche';
 
         // Only show ticks at week starts
         scale.ticks = Array.from(weekRangesByStartIndex.keys()).map((idx) => ({ value: idx }));
@@ -295,8 +302,8 @@ function initializeChart() {
             x: {
                 display: true,
                 title: {
-                    display: true,
-                    text: 'Zeitraum'
+                    display: false,
+                    text: ''
                 },
                 grid: {
                     display: true,

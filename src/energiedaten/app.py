@@ -74,8 +74,8 @@ def get_energy_data():
         )
         
         print(f"DEBUG: Gefundene Datensätze: {len(data)}")
-        
-        # Daten für Chart.js formatieren
+
+        # Daten für Chart.js formatieren (Daily)
         formatted_data = {}
         for record in data:
             source = record['energy_source_name']
