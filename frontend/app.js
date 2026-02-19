@@ -52,6 +52,12 @@ function formatDdMm(date) {
     return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function formatMmYyyy(date) {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();   
+    return `${month}.${year}`;
+}
+
 function startOfWeekMonday(date) {
     // JS: 0=Sun..6=Sat. We want Monday as start.
     const d = new Date(date);
@@ -109,7 +115,7 @@ const adaptiveTimeTicksPlugin = {
         const minPxPerDay = pluginOptions?.minPxPerDay ?? 18;
 
         const pxPerDay = width / Math.max(labels.length, 1);
-        const mode = pxPerDay >= minPxPerDay ? 'day' : 'week';
+        const mode = pxPerDay >= minPxPerDay ? 'day' : 'month';
 
         chart.$xAxisMode = mode;
 
@@ -191,23 +197,23 @@ function setupEventListeners() {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    const thirtyDaysAgo = new Date(yesterday);
-    thirtyDaysAgo.setDate(yesterday.getDate() - 30);
+    const tenYearsAgo = new Date(yesterday);
+    tenYearsAgo.setDate(yesterday.getDate() - 30 * 12 * 10);
 
     const yesterdayIso = yesterday.toISOString().split('T')[0];
-    const thirtyDaysAgoIso = thirtyDaysAgo.toISOString().split('T')[0];
+    const tenYearsAgoIso = tenYearsAgo.toISOString().split('T')[0];
 
     endDateInput.max = yesterdayIso;
     startDateInput.max = yesterdayIso;
 
     endDateInput.value = yesterdayIso;
-    startDateInput.value = thirtyDaysAgoIso;
+    startDateInput.value = tenYearsAgoIso;
     
     startDateInput.addEventListener('change', () => {
         if (startDateInput.value && endDateInput.value) {
             if (new Date(startDateInput.value) > new Date(endDateInput.value)) {
                 alert('Startdatum muss vor dem Enddatum liegen!');
-                startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+                startDateInput.value = tenYearsAgo.toISOString().split('T')[0];
                 return;
             }
             loadData();
@@ -312,7 +318,7 @@ function initializeChart() {
                     color: 'rgba(0, 0, 0, 0.1)'
                 },
                 ticks: {
-                    maxRotation: 45,
+                    maxRotation: 45,  
                     minRotation: 45,
                     autoSkip: true,
                     callback: function(value, index) {
@@ -324,6 +330,14 @@ function initializeChart() {
                             const range = chart.$weekRangesByStartIndex.get(value);
                             if (!range) return '';
                             return `Daten ${formatDdMm(range.start)} bis ${formatDdMm(range.end)}`;
+                        }
+
+                        // Month mode: show MM.YYYY
+                        if (chart?.$xAxisMode === 'month') {
+                            const d = parseYyyyMmDd(label);
+                            if (!isNaN(d.getTime())) {
+                                return formatMmYyyy(d);
+                            }
                         }
 
                         // Day mode: show DD.MM
@@ -508,14 +522,12 @@ function updateChart(data) {
     };
 
     const isPieChart = currentChartType === 'pie' || currentChartType === 'doughnut';
-    
     if (isPieChart) {
         // Für Kreisdiagramme: Summe aller Werte pro Energiequelle
         const datasets = [];
         const labels = [];
         const values = [];
         const backgroundColors = [];
-        
         Object.keys(data).forEach(sourceName => {
             const sourceData = data[sourceName];
             const sum = sourceData.values.reduce((acc, val) => acc + (val || 0), 0);

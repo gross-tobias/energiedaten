@@ -39,8 +39,7 @@ class EnergyChartsDatabase:
             )
             """,
             "INSERT INTO data_source (name, api_url) VALUES ('Energy Charts', 'https://api.energy-charts.info')",
-            "INSERT INTO energy_source (name) VALUES ('Solar DC')",
-            "INSERT INTO energy_source (name) VALUES ('Solar AC')",
+            "INSERT INTO energy_source (name) VALUES ('Solar')",
             "INSERT INTO energy_source (name) VALUES ('Wind Onshore')",
             "INSERT INTO energy_source (name) VALUES ('Wind Offshore')",
         ]

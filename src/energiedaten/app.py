@@ -130,8 +130,7 @@ def get_latest_data():
 @app.route('/api/fetch-all')
 def fetch_all():
     data = client.getInstalledPower("de", "monthly")
-    _savePowerData(data, "Solar DC")
-    _savePowerData(data, "Solar AC")
+    _savePowerData(data, "Solar", ['Solar AC', 'Solar DC'])
     _savePowerData(data, "Wind onshore")
     _savePowerData(data, "Wind offshore")
     results = {}
@@ -160,21 +159,23 @@ def debug_count():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-def _savePowerData(data, energy_source):
+def _savePowerData(data, energy_source, energy_source_list=[]):
     """Speichert Power-Daten (GW) in der Datenbank"""
     if not data:
         print(f"DEBUG: Keine Daten für {energy_source}")
         return False
       
-    unix_times = None
-    values = None
+    unix_times = []
+    values = []
     
     if "time" in data and "production_types" in data:
         unix_times = data["time"]
         for type in data['production_types']:
             if type['name'] == energy_source:
                 values = type["data"]
-    
+            elif type['name'] in energy_source_list:
+                values += type["data"]
+
     if not unix_times or not values:
         print(f"DEBUG: Keine Zeitstempel oder Werte für {energy_source}")
         return False
