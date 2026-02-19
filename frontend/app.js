@@ -24,7 +24,7 @@ function updateDatasetLegendUI() {
     const locked = isDatasetToggleLocked();
     legend.classList.toggle('locked', locked);
 
-    const ids = ['toggleSolar', 'toggleWindOnshore', 'toggleWindOffshore'];
+    const ids = ['toggleSolar', 'toggleWindOnshore', 'toggleWindOffshore', 'toggleBiomass'];
     ids.forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -246,6 +246,10 @@ function setupEventListeners() {
 
     document.getElementById('toggleWindOffshore').addEventListener('change', (e) => {
         toggleDataset('Wind Offshore', e.target.checked);
+    });
+
+    document.getElementById('toggleBiomass').addEventListener('change', (e) => {
+        toggleDataset('Biomass', e.target.checked);
     });
 }
 
@@ -518,7 +522,8 @@ function updateChart(data) {
     const colors = {
         'Solar': '#FFD700',
         'Wind Onshore': '#4CAF50',
-        'Wind Offshore': '#2196F3'
+        'Wind Offshore': '#2196F3',
+        'Biomass': '#ff8800',
     };
 
     const isPieChart = currentChartType === 'pie' || currentChartType === 'doughnut';
@@ -671,6 +676,13 @@ function calculateAverages(data) {
         document.getElementById('windOffshoreValue').textContent = formatValue(averages['Wind Offshore']);
     } else {
         document.getElementById('windOffshoreValue').textContent = '-';
+    }
+        
+    // Wind Offshore Average
+    if (averages['Biomass'] !== undefined) {
+        document.getElementById('biomassValue').textContent = formatValue(averages['Biomass']);
+    } else {
+        document.getElementById('biomassValue').textContent = '-';
     }
 }
 

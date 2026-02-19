@@ -133,6 +133,8 @@ def fetch_all():
     _savePowerData(data, "Solar", ['Solar AC', 'Solar DC'])
     _savePowerData(data, "Wind onshore")
     _savePowerData(data, "Wind offshore")
+    _savePowerData(data, "Biomass")
+    
     results = {}
     results['solar'] = 'success'
     results['wind_onshore'] = 'success'

@@ -42,6 +42,7 @@ class EnergyChartsDatabase:
             "INSERT INTO energy_source (name) VALUES ('Solar')",
             "INSERT INTO energy_source (name) VALUES ('Wind Onshore')",
             "INSERT INTO energy_source (name) VALUES ('Wind Offshore')",
+            "INSERT INTO energy_source (name) VALUES ('Biomass')",
         ]
         self._executeMany(commands)
 
